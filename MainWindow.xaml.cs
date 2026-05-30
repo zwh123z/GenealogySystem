@@ -331,21 +331,72 @@ namespace GenealogySystem
         private void btnFindPath_Click(object sender, RoutedEventArgs e)
         {
             if (!int.TryParse(txtPathId1.Text, out int id1) || !int.TryParse(txtPathId2.Text, out int id2)) return;
-            using var db = new AppDbContext();
-            // 仅在当前族谱内搜索
-            var all = db.Members.Where(m => m.GenealogyId == _selectedGenealogyId).Take(10000).ToList();
-            var q = new Queue<List<Member>>(); var visited = new HashSet<int> { id1 };
-            var start = all.FirstOrDefault(x => x.Id == id1); if (start == null) return;
-            q.Enqueue(new List<Member> { start });
-            while (q.Count > 0)
+
+            using (var db = new AppDbContext())
             {
-                var p = q.Dequeue(); var last = p.Last();
-                if (last.Id == id2) { MessageBox.Show("通路: " + string.Join(" ➔ ", p.Select(x => x.Name))); return; }
-                // 邻居同时包括父 ID 和 母 ID
-                var neighbors = all.Where(m => m.Id == last.FatherId || m.Id == last.MotherId || m.FatherId == last.Id || m.MotherId == last.Id).ToList();
-                foreach (var n in neighbors) if (!visited.Contains(n.Id)) { visited.Add(n.Id); var np = new List<Member>(p) { n }; q.Enqueue(np); }
+                try
+                {
+                    // 1. 获取两个人的祖先链 (从自己开始往上数)
+                    List<Member> path1 = GetAncestorList(id1, db);
+                    List<Member> path2 = GetAncestorList(id2, db);
+
+                    if (path1.Count == 0 || path2.Count == 0)
+                    {
+                        MessageBox.Show("未找到成员信息。"); return;
+                    }
+
+                    // 2. 寻找最近公共祖先 (LCA)
+                    Member commonAncestor = null;
+                    int index1 = -1, index2 = -1;
+
+                    foreach (var m1 in path1)
+                    {
+                        var match = path2.FirstOrDefault(m2 => m2.Id == m1.Id);
+                        if (match != null)
+                        {
+                            commonAncestor = m1;
+                            index1 = path1.IndexOf(m1);
+                            index2 = path2.IndexOf(match);
+                            break;
+                        }
+                    }
+
+                    if (commonAncestor == null)
+                    {
+                        MessageBox.Show("这两位成员没有共同的祖先，无法建立通路。");
+                        return;
+                    }
+
+                    // 3. 拼接路径：A -> ... -> 共同祖先 -> ... -> B
+                    var finalPath = new List<string>();
+
+                    // A 到 共同祖先
+                    for (int i = 0; i <= index1; i++) finalPath.Add(path1[i].Name);
+
+                    // 共同祖先 到 B (倒序)
+                    for (int i = index2 - 1; i >= 0; i--) finalPath.Add(path2[i].Name);
+
+                    MessageBox.Show($"找到亲缘通路！(跨越 {finalPath.Count - 1} 代)\n\n" + string.Join(" ➔ ", finalPath));
+                }
+                catch (Exception ex) { MessageBox.Show("查询出错：" + ex.Message); }
             }
-            MessageBox.Show("未找到通路");
+        }
+
+        // 辅助函数：向上追溯完整祖先链
+        private List<Member> GetAncestorList(int id, AppDbContext db)
+        {
+            var list = new List<Member>();
+            var current = db.Members.AsNoTracking().FirstOrDefault(m => m.Id == id);
+            while (current != null)
+            {
+                list.Add(current);
+                // 向上寻找父亲或母亲
+                int? parentId = current.FatherId ?? current.MotherId;
+                if (parentId == null || parentId == 0) break;
+                current = db.Members.AsNoTracking().FirstOrDefault(m => m.Id == parentId);
+                if (list.Count > 100) break; // 安全保护
+            }
+            return list;
         }
         #endregion
 

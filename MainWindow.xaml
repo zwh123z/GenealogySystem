@@ -175,7 +175,7 @@
                                 <Button Content="追溯祖先" Click="btnShowAncestors_Click" Background="#3498DB" Foreground="White"/>
                             </StackPanel>
                         </GroupBox>
-                        <GroupBox Header="亲缘路径计算 (BFS)" Padding="10">
+                        <GroupBox Header="亲缘路径计算" Padding="10">
                             <StackPanel>
                                 <TextBox x:Name="txtPathId1" Margin="0,5" Tag="ID 1"/>
                                 <TextBox x:Name="txtPathId2" Margin="0,5" Tag="ID 2"/>
